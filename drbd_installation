@@ -1,0 +1,69 @@
+
+DRBD
+apt install drbd-utils 
+modprobe drbd 
+lsmod |grep drbd
+
+
+
+
+Creation du fichier /etc/drbd.d/wiki.rest ##Ne pas oublier d’ajouter les nodes et les ip associés aux VM
+
+resource wiki {
+  on sd10-0401 {
+    device /dev/drbd2;
+    disk /dev/mapper/VGROOT-lv_drbd;
+    address 10.254.3.33:7789;
+    meta-disk internal;
+  }
+  on sd10-0402 {
+    device /dev/drbd2;
+    disk /dev/mapper/VGROOT-lv_drbd;
+    address 10.254.3.34:7789;
+    meta-disk internal;
+  }
+}
+Sauvegarder le fichier
+drbdadm create-md wiki
+drbdam up wiki
+cat /proc/drbd si la syncho est faite « ok »
+drbdadm -- --overwrite-data-of-peer primary wiki sur le noeuf primary
+drbdadm secondary wiki sur le soncdary
+
+mkfs.ext4 /dev/drbd2 
+ mkdir /mnt/drbd 
+ mount -v /dev/drbd2 /mnt/drbd
+systemctl disable mariadb/nginx
+systemctl stop mariadb/nginx
+cp /var/www/bookstack/BookStack /mnt/drbd/
+cp /var/lib/mysql /mnt/drbd/
+sur la machine 2 rename boookstack par bookstack.orig et mysql par mysql.orig
+ln -s /mnt/drbd/BookStack /var/www/bookstack/
+ln -s /mnt/drbd/mysql /var/lib/mysql
+Heartbeat
+apt install heartbeat
+vi /etc/hearbeat/ha.cf
+logfile /var/log/heartbeat.log
+
+node sd10-0401
+node sd10-0402
+keepalive 2
+bcast eth1
+ping 192.168.1.1
+auto_failback yes
+
+/etc/heartbeat/authkeys
+auth 1
+1 sha1 mypassword
+chmod 600 /etc/ha.d/authkeys
+
+cat /etc/heartbeat/haresources
+sd10-0401 10.254.2.15 drbddisk::wiki Filesystem::/dev/drbd2::/mnt/drbd::ext4 mysql nginx
+systemctl enable drbd
+
+dans les fichier de systemd service sur nginx
+restart=on-failure 
+RestartSec=2sec
+
+
+
